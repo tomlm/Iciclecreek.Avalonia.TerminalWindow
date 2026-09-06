@@ -121,6 +121,70 @@ public class AutoScrollToBottomTests
     });
 
     /// <summary>
+    /// <see cref="TerminalView.IsFollowingTail"/> is what a host reads to show a "jump to bottom" affordance, so
+    /// it has to be true the moment the user scrolls, not the moment the next output happens to arrive. The
+    /// flag used to be sampled only at write time; a view scrolled up in a quiet terminal reported "following"
+    /// until something was printed.
+    /// </summary>
+    [AvaloniaTest]
+    public Task Scrolling_back_stops_following_before_any_output_arrives() => Run(async () =>
+    {
+        var view = new TerminalView { Process = "" };
+        var window = Show(view);
+        var connection = new PushConnection();
+        view.AttachConnection(connection);
+        await PushAndSettle(view, connection, Lines(200));
+        Assert.That(view.IsFollowingTail, Is.True, "a view at the tail follows");
+
+        view.ViewportY = view.MaxScrollback - 50;      // park up in the scrollback; nothing is printed
+        Assert.That(view.IsFollowingTail, Is.False, "scrolling back stops the follow immediately");
+
+        view.ViewportY = view.MaxScrollback;           // and back to the bottom, still nothing printed
+        Assert.That(view.IsFollowingTail, Is.True, "returning to the tail resumes it immediately");
+
+        connection.Done();
+        window.Close();
+    });
+
+    /// <summary>
+    /// A scrollback trim that lands while the user is parked must shift the viewport by what the ring dropped,
+    /// so the same rows stay under the eye (<c>OnBufferTrimmed</c>). That handler bails while following -- and
+    /// with the flag sampled only at write time, a trim caused by a write that did NOT go through the view's
+    /// own read loop (a host writing to <see cref="TerminalView.Terminal"/> directly, which is public for that)
+    /// found the flag still true after a scroll-up and did nothing: the parked view drifted onto other rows.
+    /// </summary>
+    [AvaloniaTest]
+    public Task A_trim_while_parked_keeps_the_same_rows_under_the_viewport_even_for_direct_writes() => Run(async () =>
+    {
+        var view = new TerminalView { Process = "" };
+        var window = Show(view);
+        var connection = new PushConnection();
+        view.AttachConnection(connection);
+        await PushAndSettle(view, connection, Lines(200));
+        var terminal = view.Terminal;
+
+        view.ViewportY = view.MaxScrollback - 12;      // park 12 lines up
+        var parked = view.ViewportY;
+        var topRowBefore = terminal.Buffer.Lines[parked].TranslateToString(trimRight: true);
+        Assert.That(topRowBefore, Does.StartWith("line "), "the view is parked over earlier output, not the tail");
+
+        // Push the ring past capacity and evict, writing STRAIGHT to the emulator -- not through the read loop,
+        // which samples the flag for itself. Well short of evicting the parked rows.
+        var capacity = terminal.Options.Scrollback + terminal.Rows;
+        var flood = capacity - terminal.Buffer.Length + 100;
+        Assert.That(flood, Is.GreaterThan(0));
+        for (var i = 0; i < flood; i++)
+            terminal.WriteLine($"flood {i}");
+
+        Assert.That(view.ViewportY, Is.LessThan(parked), "the ring dropped lines off the top and the viewport moved with them");
+        Assert.That(terminal.Buffer.Lines[view.ViewportY].TranslateToString(trimRight: true), Is.EqualTo(topRowBefore),
+            "the same row is still at the top of the parked view");
+
+        connection.Done();
+        window.Close();
+    });
+
+    /// <summary>
     /// The last item of #25's own test plan, which failed as originally written: turning the property off has
     /// to actually stop the terminal scrolling itself.
     /// </summary>
