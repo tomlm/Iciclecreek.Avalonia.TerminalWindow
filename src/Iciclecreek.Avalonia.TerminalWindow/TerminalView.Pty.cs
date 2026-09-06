@@ -488,12 +488,27 @@ namespace Iciclecreek.Terminal
                 // the ESU handler — carries the new generation and is current on arrival.
                 Interlocked.Increment(ref _liveWriteGeneration);
 
-                // Bytes straight through, no UTF-16 round trip. This fixes a real defect, not just
-                // an allocation: decoding each read on its own corrupts any multi-byte sequence the
-                // read boundary happens to split, and pty reads end wherever they end. The parser
-                // carries the partial sequence into the next chunk instead -- which is what
-                // OutputReceivedEventArgs.Bytes has been promising subscribers all along.
-                _terminal.Write(chunk.Span);
+                // Declared for the renderer BEFORE the first byte parses. An application's atomic
+                // update only protects from the BSU byte onward — a paint landing between this
+                // chunk's arrival and its BSU being reached saw "generation moved, no update open",
+                // declined the capture, and read the buffer mid-write: the residual tear. While
+                // this flag is up the renderer prefers the last COMPLETE capture over the live
+                // buffer; once the write finishes, live is quiescent and serves as before.
+                _bufferWriteInProgress = true;
+
+                try
+                {
+                    // Bytes straight through, no UTF-16 round trip. This fixes a real defect, not just
+                    // an allocation: decoding each read on its own corrupts any multi-byte sequence the
+                    // read boundary happens to split, and pty reads end wherever they end. The parser
+                    // carries the partial sequence into the next chunk instead -- which is what
+                    // OutputReceivedEventArgs.Bytes has been promising subscribers all along.
+                    _terminal.Write(chunk.Span);
+                }
+                finally
+                {
+                    _bufferWriteInProgress = false;
+                }
 
                 // See _inputStartRow. A change of row means the shell drew something new, so the
                 // recorded input start is stale — but where the prompt ENDS is not known until the

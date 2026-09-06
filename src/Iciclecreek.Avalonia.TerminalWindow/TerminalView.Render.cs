@@ -372,7 +372,7 @@ namespace Iciclecreek.Terminal
             // NEXT render might replay runs built from it, which the pool accounts for.
             var capturedFrame = _frameCapture.PinForRender(
                 startLine, _terminal.Cols, viewportLines,
-                Interlocked.Read(ref _liveWriteGeneration), _atomicUpdate);
+                Interlocked.Read(ref _liveWriteGeneration), _atomicUpdate, _bufferWriteInProgress);
 
             // The direct renderer draws the cell grid onto the Skia canvas instead of recording a fill
             // and a text draw per run. Everything after it — cursor, selection, the hovered link —
