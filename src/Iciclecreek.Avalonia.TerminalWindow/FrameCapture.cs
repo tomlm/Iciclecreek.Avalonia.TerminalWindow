@@ -123,12 +123,18 @@ namespace Iciclecreek.Terminal
                     ? buffer.GetLine(absolute)
                     : null;
 
-                // The rows the snapshot renderer already declines, for the same reasons: a clone
-                // does not carry placements, and a doubled row carries a transform the consumers
-                // resolve against the live line. Null sends the renderer to the live line, which
-                // is exactly what happens for these rows today.
+                // The rows the snapshot renderer already declines, for the same reasons: a sized
+                // run and a doubled row carry state the consumers resolve against the live line.
+                // Null sends the renderer to the live line, which is exactly what happens for
+                // these rows today.
+                //
+                // Image rows are NOT excluded, and that is load-bearing: CopyFrom carries the
+                // placements along with the cells. A full-screen picture drawn through Unicode
+                // placeholders (Consolonia) makes every viewport row an image row, and every one
+                // of them read live was exactly the tear this class exists to prevent — a paint
+                // landing mid-write showed rows whose tiles were mid-replacement, a black band
+                // sweeping the picture while text rows above it held steady.
                 if (live is null
-                    || live.HasImages
                     || live.HasSizedRuns
                     || live.LineAttribute != LineAttribute.Normal)
                 {
