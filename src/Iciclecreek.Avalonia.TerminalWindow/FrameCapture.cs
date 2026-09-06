@@ -152,6 +152,12 @@ namespace Iciclecreek.Terminal
                 // from cache without being re-shaped — and a later write to the LIVE line clears
                 // only the live line's slot, never this one's.
                 clone.CopyFrom(live);
+
+                // Against an emulator whose CopyFrom predates carrying placements, the clone would
+                // show the picture row WITHOUT its picture — worse than the tear. Detect it and
+                // fall back to the live line for that row, which is exactly the old behaviour.
+                if (live.HasImages && !clone.HasImages)
+                    slot.Lines[row] = null;
             }
 
             slot.StartLine = start;
@@ -179,10 +185,12 @@ namespace Iciclecreek.Terminal
         /// </summary>
         /// <remarks>
         /// <para>A capture serves when it is CURRENT — its generation matches the view's, meaning
-        /// nothing has written the buffer since it was taken — or when an atomic update is open,
-        /// where the live buffer is mid-frame by declaration and a complete previous frame beats a
-        /// fresh half-written one. A capture that is neither is declined: the buffer has moved on
-        /// outside any frame, and live is both correct and as safe as it ever was.</para>
+        /// nothing has written the buffer since it was taken — or when the live buffer is known to
+        /// be mid-write: an atomic update is open (mid-frame by declaration), or the reader is
+        /// inside <c>Terminal.Write</c> right now (mid-chunk in fact, which covers the bytes of a
+        /// frame BEFORE its BSU has parsed). In both, a complete previous frame beats a fresh
+        /// half-written one. A capture that is none of these is declined: the buffer has moved on
+        /// outside any frame and outside any write, and live is both correct and fresher.</para>
         /// <para>The pin stays until the next call rather than being released per render. Runs
         /// built from the capture can be replayed by later frames through the line cache, so "in
         /// use" genuinely extends past the render that pinned it; holding one slot back costs
@@ -193,7 +201,8 @@ namespace Iciclecreek.Terminal
         /// selection that mattered saw this pin.</para>
         /// </remarks>
         public CapturedFrame? PinForRender(
-            int startLine, int cols, int rows, long liveGeneration, bool atomicUpdate)
+            int startLine, int cols, int rows, long liveGeneration, bool atomicUpdate,
+            bool writeInProgress = false)
         {
             CapturedFrame? frame;
 
@@ -212,7 +221,7 @@ namespace Iciclecreek.Terminal
             if (frame.Cols != cols || frame.StartLine != startLine || frame.Lines.Length < rows)
                 return null;
 
-            if (frame.Generation != liveGeneration && !atomicUpdate)
+            if (frame.Generation != liveGeneration && !atomicUpdate && !writeInProgress)
                 return null;
 
             return frame;

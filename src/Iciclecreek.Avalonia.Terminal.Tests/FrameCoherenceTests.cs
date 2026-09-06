@@ -114,6 +114,43 @@ public class FrameCoherenceTests
     }
 
     [AvaloniaTest]
+    public void A_paint_during_a_chunk_write_before_its_BSU_serves_the_last_complete_frame()
+    {
+        // The residual tear after the mid-frame one was fixed: an atomic update only protects
+        // from the BSU byte onward, but the reader bumps the write generation when a CHUNK
+        // arrives — so a paint landing while the bytes BEFORE the chunk's BSU parse saw a stale
+        // generation with no update open, declined the capture, and read the buffer mid-write.
+        // While the reader declares a write in progress, a stale capture that still describes
+        // the viewport must serve; outside any write, staleness must still send the paint to
+        // the live buffer, whose freshness is the point.
+        var (view, window) = Realised();
+        try
+        {
+            WriteFrame(view, 'A');
+
+            var pool = Field<FrameCapturePool>(view, "_frameCapture");
+            var generation = Field<long>(view, "_liveWriteGeneration");
+
+            var duringWrite = pool.PinForRender(
+                view.Terminal.Buffer.ViewportY, view.Terminal.Cols, view.Terminal.Rows,
+                generation + 1, atomicUpdate: false, writeInProgress: true);
+
+            Assert.That(duringWrite, Is.Not.Null,
+                "a stale capture must serve while the buffer is mid-write, or the paint tears");
+            Assert.That(CellAt(duringWrite!, 0, view), Is.EqualTo('A'));
+
+            var quiescent = pool.PinForRender(
+                view.Terminal.Buffer.ViewportY, view.Terminal.Cols, view.Terminal.Rows,
+                generation + 1, atomicUpdate: false, writeInProgress: false);
+
+            Assert.That(quiescent, Is.Null,
+                "outside any write a stale capture must be declined -- the live buffer is "
+                + "quiescent and fresher, and serving old frames there is plain staleness");
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaTest]
     public void The_next_complete_frame_replaces_the_capture()
     {
         // Coherence must not mean staleness: the moment B's ESU lands, B is what renders.

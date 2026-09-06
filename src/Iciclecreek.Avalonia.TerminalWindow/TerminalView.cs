@@ -153,6 +153,21 @@ namespace Iciclecreek.Terminal
         private long _atomicUpdateStartedAt;
 
         /// <summary>
+        /// Whether the pty reader is inside <c>Terminal.Write</c> right now.
+        /// </summary>
+        /// <remarks>
+        /// The renderer's capture gate needs it: DEC 2026 only declares the buffer mid-frame from
+        /// the BSU byte onward, but the buffer is just as mid-write while the bytes BEFORE the BSU
+        /// of a chunk are parsing — and a paint in that window used to fall back to the live
+        /// buffer and tear. Raised and lowered on the reader thread around the write; volatile so
+        /// the UI thread reads the current value rather than a cached one. A false read racing the
+        /// flag going up narrows the exposure from the length of a chunk parse to the length of a
+        /// field write, which is the practical difference between one torn paint in twenty and
+        /// none observed.
+        /// </remarks>
+        private volatile bool _bufferWriteInProgress;
+
+        /// <summary>
         /// How long a hold may last before the view paints anyway.
         /// </summary>
         /// <remarks>
