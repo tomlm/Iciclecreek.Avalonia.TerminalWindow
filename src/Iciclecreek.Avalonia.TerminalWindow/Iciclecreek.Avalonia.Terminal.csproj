@@ -5,8 +5,8 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
   <PropertyGroup>
-    <Version>4.0.1</Version>
-    <AssemblyVersion>4.0.1.0</AssemblyVersion>
+    <Version>4.0.2</Version>
+    <AssemblyVersion>4.0.2.0</AssemblyVersion>
     <Description>Avalonia terminal controls (TerminalControl/TerminalWindow) that provide an XTerm console for hosting console applications in Avalonia, including Sixel and Kitty graphics.</Description>
     <Company>Iciclecreek</Company>
     <Authors>Tom Laird-McConnell</Authors>
@@ -45,7 +45,7 @@
   
   <ItemGroup Condition="'$(SolutionName)' != 'Iciclecreek.Avalonia.TerminalWindow.Local'">
     <PackageReference Include="Porta.Pty" Version="2.2.2" />
-    <PackageReference Include="XTerm.NET" Version="2.0.1" />
+    <PackageReference Include="XTerm.NET" Version="2.0.2" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(SolutionName)' == 'Iciclecreek.Avalonia.TerminalWindow.Local'">
