@@ -1511,6 +1511,13 @@ namespace Iciclecreek.Terminal
 
                 if (oldValue != _terminal.Buffer.ViewportY)
                 {
+                    // Every user-driven scroll comes through here -- the wheel, the scrollbar, scroll-to-prompt -- so
+                    // this is where "following the tail" is decided for them, with the rule the write path applies
+                    // before each write: at the bottom (or in the alternate buffer) means follow. Until now the flag
+                    // was sampled only at write time, so IsFollowingTail stayed true after a scroll-up until the next
+                    // output arrived, and a scrollback trim landing in that window (OnBufferTrimmed bails while
+                    // following) carried a parked view away with it.
+                    _followBottom = _isAlternateBuffer || (_autoScroll && _terminal.Buffer.IsAtBottom);
                     RaisePropertyChanged(ViewportYProperty, oldValue, _terminal.Buffer.ViewportY);
                     RequestPaint();
                 }
